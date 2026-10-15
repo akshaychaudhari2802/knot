@@ -11,3 +11,17 @@ endif()
 option(KNOT_ASAN  "AddressSanitizer + UBSan" OFF)
 option(KNOT_TESTS "Build tests and victims"  ON)
 
+# ---- Tier 1: zero third-party dependencies -------------------------------
+add_library(knot_tier1 STATIC
+    src/proc.cpp
+    src/snapshot.cpp
+    src/syscall.cpp
+    src/source.cpp
+    src/symbols.cpp
+    src/lock_decoder.cpp
+    src/identity.cpp
+    src/graph.cpp
+    src/fd_resolver.cpp
+    src/analysis.cpp
+    src/explain.cpp
+    src/report.cpp
