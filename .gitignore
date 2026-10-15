@@ -1,0 +1,5 @@
+build*/
+bin/
+rpms/
+*.knot.json
+core.*
