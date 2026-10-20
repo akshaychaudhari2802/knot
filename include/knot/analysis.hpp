@@ -62,3 +62,30 @@ struct Finding {
 
 struct PoolInfo {
     std::string name;
+    int total = 0, lock_blocked = 0, idle = 0, busy = 0;
+};
+
+struct HotLock {
+    int lock = -1;
+    double avg_waiters = 0;
+    int max_waiters = 0, contended_samples = 0;
+};
+
+enum class VerdictKind { Healthy, Deadlock, SelfDeadlock, Orphaned, Hung, Blocked, Contended,
+                         Attention, Indeterminate };
+
+struct Verdict {
+    VerdictKind kind = VerdictKind::Healthy;
+    std::string summary;
+    int exit_code = 0;   // 0 healthy, 1 deadlock, 2 other finding, 3 indeterminate
+};
+
+struct Report {
+    Snapshot snap;
+    std::vector<LockInfo> locks;
+    std::vector<ThreadInfo> threads;   // parallel to snap.threads
+    WaitGraph graph;
+    std::vector<Finding> findings;
+    std::vector<PoolInfo> pools;
+    Verdict verdict;
+
