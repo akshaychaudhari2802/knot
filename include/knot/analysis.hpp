@@ -89,3 +89,39 @@ struct Report {
     std::vector<PoolInfo> pools;
     Verdict verdict;
 
+    // Sampling (samples > 1)
+    int samples = 1;
+    double window_s = 0;
+    std::map<pid_t, double> cpu_pct;
+    std::set<pid_t> no_wakeups;   // same blocked syscall + args, zero voluntary switches
+    std::vector<HotLock> hot_locks;
+
+    std::chrono::microseconds elapsed{0};
+    bool from_core = false;   // post-mortem: no thread names, no sampling
+
+    // Tier 2 (empty without --stacks / libdw)
+    std::map<pid_t, Stack> stacks;
+    double max_pause_ms = 0;      // longest single-thread stop while unwinding
+    std::string stacks_note;      // why some stacks are missing, if any
+
+    const ThreadSnap* thread(pid_t tid) const { return snap.find(tid); }
+    int index_of(pid_t tid) const;
+};
+
+struct AnalyzeOptions {
+    int samples = 3;                                      // 1 = --once
+    std::chrono::milliseconds interval{500};
+    int pool_min_size = 4;
+    StackProvider* stacks = nullptr;                      // Tier 2: livelock probe + final stacks
+};
+
+// One snapshot, no sampling-based judgement.
+Report analyze_snapshot(const Source& src, Snapshot snap, SymbolResolver* symbols, int pool_min_size = 4);
+// Takes opt.samples snapshots and judges hung vs contended vs healthy.
+Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* symbols);
+
+std::string pool_key(const std::string& thread_name);   // "worker-12" -> "worker"
+const char* to_string(VerdictKind v);
+const char* to_string(FindingType f);
+
+}  // namespace knot
