@@ -25,3 +25,16 @@ add_library(knot_tier1 STATIC
     src/analysis.cpp
     src/explain.cpp
     src/report.cpp
+    src/permission.cpp
+    src/stacks.cpp
+    src/watch.cpp)
+target_include_directories(knot_tier1 PUBLIC include)
+target_compile_options(knot_tier1 PRIVATE -Wall -Wextra -Wshadow -pedantic-errors)
+if(KNOT_ASAN)
+    target_compile_options(knot_tier1 PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(knot_tier1 PUBLIC -fsanitize=address,undefined)
+endif()
+
+# ---- Tier 2: stacks via elfutils libdwfl (optional) ------------------------
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
