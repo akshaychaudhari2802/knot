@@ -116,3 +116,12 @@ struct AnalyzeOptions {
 };
 
 // One snapshot, no sampling-based judgement.
+Report analyze_snapshot(const Source& src, Snapshot snap, SymbolResolver* symbols, int pool_min_size = 4);
+// Takes opt.samples snapshots and judges hung vs contended vs healthy.
+Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* symbols);
+
+std::string pool_key(const std::string& thread_name);   // "worker-12" -> "worker"
+const char* to_string(VerdictKind v);
+const char* to_string(FindingType f);
+
+}  // namespace knot
