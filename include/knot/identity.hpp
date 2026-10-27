@@ -28,3 +28,16 @@ struct Owner {
 
 class Identity {
 public:
+    explicit Identity(const Snapshot& s) : snap_(s) {}
+    // `process_shared`: only a PTHREAD_PROCESS_SHARED lock can be held by another
+    // process. For a private lock, an owner missing from this process is GONE,
+    // even if its TID now exists elsewhere (the kernel reuses TIDs).
+    Owner resolve(pid_t owner_ns_tid, bool process_shared = true) const;
+
+private:
+    const Snapshot& snap_;
+};
+
+const char* to_string(OwnerStatus s);
+
+}  // namespace knot
