@@ -17,3 +17,7 @@ struct AccessReport {
     bool in_container = false;
     std::string explanation;          // empty when access is fine
 };
+
+AccessReport check_access(pid_t pid);
+
+}  // namespace knot
