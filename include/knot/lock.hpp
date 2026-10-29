@@ -39,3 +39,11 @@ public:
     // Classify the object behind `futex_addr`. Never guesses: anything that
     // fails the plausibility checks is CondVarOrUnknown, and never an edge.
     DecodedLock decode(std::uint64_t futex_addr) const;
+
+private:
+    std::optional<DecodedLock> try_mutex(std::uint64_t base) const;
+    std::optional<DecodedLock> try_rwlock(std::uint64_t base, std::uint64_t futex_addr) const;
+    const Source& src_;
+};
+
+}  // namespace knot
