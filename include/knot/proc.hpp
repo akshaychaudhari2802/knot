@@ -75,3 +75,10 @@ struct Stat {
 std::optional<Stat> parse_stat(const std::string& content);
 
 // Value of "Key:" in a /proc status file, whitespace-trimmed.
+std::optional<std::string> status_field(const std::string& status, const std::string& key);
+
+long clock_ticks_per_second();
+std::string trim(std::string s);
+
+}  // namespace proc
+}  // namespace knot
