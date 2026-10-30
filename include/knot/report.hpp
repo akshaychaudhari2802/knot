@@ -18,3 +18,6 @@ void render_text(const Report& r, std::ostream& os, const RenderOptions& opt = {
 // enough to attach to a ticket. Contains NO memory contents except lock words.
 void render_json(const Report& r, std::ostream& os);
 
+std::string json_escape(const std::string& s);
+
+}  // namespace knot
