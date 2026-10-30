@@ -21,3 +21,30 @@ enum class ErrorKind { NoSuchProcess, PermissionDenied, NotSupported, BadCore, I
 struct KnotError : std::runtime_error {
     KnotError(ErrorKind k, const std::string& what) : std::runtime_error(what), kind(k) {}
     ErrorKind kind;
+};
+
+// Move-only owner of a file descriptor: closed exactly once, on every path,
+// including a constructor that throws half-way. (CoreFile's first version kept
+// a raw int and leaked it on every "not a core file" error: a destructor never
+// runs for an object whose constructor threw.)
+class Fd {
+public:
+    Fd() noexcept = default;
+    explicit Fd(int fd) noexcept : fd_(fd) {}
+    Fd(Fd&& o) noexcept : fd_(std::exchange(o.fd_, -1)) {}
+    Fd& operator=(Fd&& o) noexcept {
+        if (this != &o) { reset(); fd_ = std::exchange(o.fd_, -1); }
+        return *this;
+    }
+    Fd(const Fd&) = delete;
+    Fd& operator=(const Fd&) = delete;
+    ~Fd() { reset(); }
+
+    int get() const noexcept { return fd_; }
+    explicit operator bool() const noexcept { return fd_ >= 0; }
+    void reset() noexcept {
+        if (fd_ >= 0) ::close(fd_);   // not retried on EINTR: Linux releases the fd regardless
+        fd_ = -1;
+    }
+
+private:
