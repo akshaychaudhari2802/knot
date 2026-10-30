@@ -48,3 +48,30 @@ public:
     }
 
 private:
+    int fd_ = -1;
+};
+
+namespace proc {
+
+std::string path(pid_t pid, const std::string& leaf);                     // /proc/<pid>/<leaf>
+std::string task_path(pid_t pid, pid_t tid, const std::string& leaf);     // /proc/<pid>/task/<tid>/<leaf>
+
+// Whole small file (stat, status, comm, syscall, maps...). errno_out receives
+// errno on failure so callers can tell ENOENT (gone) from EACCES/EPERM (denied).
+std::optional<std::string> read_file(const std::string& p, int* errno_out = nullptr);
+std::optional<std::string> read_link(const std::string& p);
+std::vector<pid_t> list_numeric_dir(const std::string& dir);   // task ids, pids, fds
+
+// /proc/<pid>/task/<tid>/stat. The comm field may contain spaces and ')':
+// it is everything between the FIRST '(' and the LAST ')'.
+struct Stat {
+    std::string comm;
+    char state = '?';
+    std::uint64_t utime = 0, stime = 0;   // clock ticks
+    int rt_priority = 0;                  // field 40
+    int policy = 0;                       // field 41: SCHED_OTHER=0, FIFO=1, RR=2
+    std::uint64_t starttime = 0;          // field 22, ticks since boot
+};
+std::optional<Stat> parse_stat(const std::string& content);
+
+// Value of "Key:" in a /proc status file, whitespace-trimmed.
