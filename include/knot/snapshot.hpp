@@ -22,3 +22,30 @@ struct SyscallInfo {
 
 struct ThreadSnap {
     pid_t tid = 0;                  // host TID (as seen by Knot)
+    pid_t ns_tid = 0;               // TID inside the target's PID namespace (what mutexes store)
+    std::string name;               // comm
+    char state = '?';               // R S D T Z ...
+    SyscallInfo sc;
+    int policy = 0;                 // SCHED_OTHER / FIFO / RR
+    int rt_priority = 0;
+    std::uint64_t vol_ctxt = 0;     // voluntary context switches: "has it woken up?"
+    std::uint64_t nonvol_ctxt = 0;
+    std::uint64_t cpu_ticks = 0;    // utime + stime
+};
+
+struct Snapshot {
+    pid_t pid = 0;
+    std::string process_name;
+    std::chrono::steady_clock::time_point taken_at{};
+    std::vector<ThreadSnap> threads;
+    std::unordered_map<pid_t, pid_t> ns_to_host;   // built from NSpid
+    bool in_container = false;                     // NSpid has more than one level
+    bool syscalls_denied = false;                  // ATTACH-level access missing (see permission.hpp)
+
+    const ThreadSnap* find(pid_t host_tid) const;
+};
+
+// Reads /proc/<pid>. Throws KnotError(NoSuchProcess | PermissionDenied) only
+// for whole-process failures; a thread exiting mid-read is skipped silently.
+Snapshot take_snapshot(pid_t pid);
+
