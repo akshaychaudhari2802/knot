@@ -49,3 +49,7 @@ struct Snapshot {
 // for whole-process failures; a thread exiting mid-read is skipped silently.
 Snapshot take_snapshot(pid_t pid);
 
+// Parses the content of /proc/<pid>/task/<tid>/syscall.
+SyscallInfo parse_syscall_file(const std::string& content);
+
+}  // namespace knot
