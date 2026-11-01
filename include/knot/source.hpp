@@ -48,3 +48,30 @@ public:
     bool is_live() const override { return true; }
     pid_t pid() const override { return pid_; }
 
+private:
+    pid_t pid_;
+    Fd mem_fd_;   // RAII: no destructor to write (rule of zero)
+};
+
+class CoreFile final : public Source {
+public:
+    // Parses PT_LOAD segments (memory), NT_PRSTATUS (one per thread: registers,
+    // hence the syscall number and arguments), NT_PRPSINFO (name) and NT_FILE (mappings).
+    explicit CoreFile(const std::string& core_path);   // throws KnotError(BadCore)
+    CoreFile(const CoreFile&) = delete;
+    CoreFile& operator=(const CoreFile&) = delete;
+
+    bool read_memory(std::uint64_t addr, void* out, std::size_t len) const override;
+    Snapshot snapshot() const override { return snap_; }
+    std::vector<Mapping> mappings() const override { return maps_; }
+    std::string file_root() const override { return ""; }
+    bool is_live() const override { return false; }
+    pid_t pid() const override { return snap_.pid; }
+    const std::string& path() const { return path_; }   // Tier 2 re-opens the core with libdwfl
+
+private:
+    struct Segment { std::uint64_t vaddr, memsz, filesz, offset; };
+    std::string path_;
+    Fd fd_;   // closed even when the constructor throws on a bad core
+    std::vector<Segment> segments_;
+    std::vector<Mapping> maps_;
