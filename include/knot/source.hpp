@@ -75,3 +75,9 @@ private:
     Fd fd_;   // closed even when the constructor throws on a bad core
     std::vector<Segment> segments_;
     std::vector<Mapping> maps_;
+    Snapshot snap_;
+};
+
+std::vector<Mapping> parse_maps(const std::string& content);   // /proc/<pid>/maps format
+
+}  // namespace knot
