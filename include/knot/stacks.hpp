@@ -46,3 +46,8 @@ struct StackGroup {
     std::vector<pid_t> tids;
 };
 std::vector<StackGroup> group_identical(const std::map<pid_t, Stack>& stacks);
+
+// The frame that says what a thread is doing: the first frame with a function name.
+std::string top_function(const Stack& s);
+
+}  // namespace knot
