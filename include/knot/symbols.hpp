@@ -47,3 +47,25 @@ public:
 
     // Name of the global/static variable containing runtime address `addr`.
     std::optional<SymbolInfo> resolve(std::uint64_t addr);
+    // "libapp.so .bss+0x2840"-style location when no symbol is found.
+    std::string location(std::uint64_t addr);
+
+private:
+    struct ObjectRange {
+        std::string path;
+        std::uint64_t bias = 0;             // runtime = file vaddr + bias
+        std::uint64_t lo = 0, hi = 0;       // runtime range covered by its PT_LOADs
+        const ElfObject* elf = nullptr;
+    };
+    const ObjectRange* object_for(std::uint64_t addr);
+
+    std::string root_;
+    std::vector<Mapping> maps_;
+    std::map<std::string, std::unique_ptr<ElfObject>> cache_;
+    std::vector<ObjectRange> ranges_;
+    bool built_ = false;
+};
+
+std::string demangle(const std::string& mangled);
+
+}  // namespace knot
