@@ -26,3 +26,14 @@ struct WatchOptions {
     std::chrono::seconds cooldown{600};
     bool once = false;                     // exit after the first trigger (tests, CI)
     StackProvider* stacks = nullptr;       // Tier 2: stacks in the fired report ONLY (polling stays zero-stop)
+};
+
+// Returns the exit code: 0 target exited normally, 1 fired (with once), 4 error.
+int watch(pid_t pid, const WatchOptions& opt);
+
+// The target's name made safe for a file name. The target chooses its own name
+// (prctl(PR_SET_NAME)), so it is untrusted input: every byte outside
+// [A-Za-z0-9._-] becomes '_'.
+std::string safe_file_name(const std::string& name);
+
+}  // namespace knot
