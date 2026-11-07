@@ -68,3 +68,30 @@ void decode_and_build(const Source& src, Report& r, SymbolResolver* symbols) {
             } else {
                 li.location = hex(d.addr);
             }
+            r.locks.push_back(std::move(li));
+        }
+        LockInfo& li = r.locks[static_cast<std::size_t>(it->second)];
+        li.waiters.push_back(t.tid);
+        (d.reader_wait ? li.reader_waiters : li.writer_waiters)++;
+        ti.lock = it->second;
+
+        if (li.owner.status == OwnerStatus::InThisProcess)
+            r.graph.add(Edge{t.tid, li.owner.host_tid, li.lock.addr});
+    }
+}
+
+std::vector<int> locks_held_by(const Report& r, pid_t tid) {
+    std::vector<int> out;
+    for (std::size_t i = 0; i < r.locks.size(); ++i)
+        if (r.locks[i].owner.status == OwnerStatus::InThisProcess && r.locks[i].owner.host_tid == tid)
+            out.push_back(static_cast<int>(i));
+    return out;
+}
+
+// What is the root-cause thread doing? This sentence IS the diagnosis.
+void diagnose_sink(const Report& r, pid_t sink, Finding& f) {
+    const int idx = r.index_of(sink);
+    if (idx < 0) { f.sink_kind = SinkKind::Unknown; f.sink_state = "exited"; return; }
+    const ThreadSnap& t = r.snap.threads[static_cast<std::size_t>(idx)];
+    const ThreadInfo& ti = r.threads[static_cast<std::size_t>(idx)];
+    FdResolver fds(r.snap.pid);
