@@ -95,3 +95,30 @@ void diagnose_sink(const Report& r, pid_t sink, Finding& f) {
     const ThreadSnap& t = r.snap.threads[static_cast<std::size_t>(idx)];
     const ThreadInfo& ti = r.threads[static_cast<std::size_t>(idx)];
     FdResolver fds(r.snap.pid);
+    std::ostringstream os;
+    if (t.state == 'D') {
+        f.sink_kind = SinkKind::DiskWait;
+        os << "in uninterruptible I/O (state D: disk, NFS or a driver) in " << syscall_name(t.sc.nr);
+    } else switch (ti.why.kind) {
+        case Wait::FdIo:
+            f.sink_kind = SinkKind::Io;
+            os << "blocked in " << syscall_name(ti.why.nr) << "(fd " << ti.why.fd << ")  ->  "
+               << fds.describe(ti.why.fd);
+            break;
+        case Wait::Sleep:
+            f.sink_kind = SinkKind::Sleep;
+            os << "sleeping (" << syscall_name(ti.why.nr) << ") while holding the lock";
+            break;
+        case Wait::EventLoopIdle:
+            f.sink_kind = SinkKind::EventLoop;
+            os << "waiting for events in " << syscall_name(ti.why.nr) << " while holding the lock";
+            break;
+        case Wait::FutexWait:
+            if (ti.lock >= 0) {
+                const LockInfo& l = r.locks[static_cast<std::size_t>(ti.lock)];
+                if (l.owner.status == OwnerStatus::Gone) {
+                    f.sink_kind = SinkKind::OrphanWait;
+                    os << "waiting on " << l.label() << ", whose owner (TID " << l.lock.owner_ns_tid << ") no longer exists";
+                } else {
+                    f.sink_kind = SinkKind::CrossWait;
+                    os << "waiting on " << l.label() << ", held by process " << l.owner.other_pid << " ("
