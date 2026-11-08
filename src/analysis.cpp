@@ -122,3 +122,30 @@ void diagnose_sink(const Report& r, pid_t sink, Finding& f) {
                 } else {
                     f.sink_kind = SinkKind::CrossWait;
                     os << "waiting on " << l.label() << ", held by process " << l.owner.other_pid << " ("
+                       << l.owner.other_name << ")";
+                }
+            } else {
+                f.sink_kind = SinkKind::CondVar;
+                os << "waiting on a condition variable (or other futex) while holding the lock";
+            }
+            break;
+        case Wait::Running:
+            f.sink_kind = SinkKind::Running;
+            os << "running on a CPU";
+            if (auto it = r.cpu_pct.find(sink); it != r.cpu_pct.end())
+                os << " (" << static_cast<int>(it->second + 0.5) << "% CPU)";
+            break;
+        case Wait::Other:
+            f.sink_kind = SinkKind::Other;
+            os << "in " << syscall_name(ti.why.nr);
+            break;
+        case Wait::Unknown:
+            f.sink_kind = SinkKind::Unknown;
+            os << "state " << t.state << " (syscall unknown)";
+            break;
+    }
+    f.sink_state = os.str();
+}
+
+// ---------------------------------------------------------------- stage 2 --
+void find_structure(Report& r, int pool_min) {
