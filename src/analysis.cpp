@@ -176,3 +176,30 @@ void find_structure(Report& r, int pool_min) {
 
 // ---------------------------------------------------------------- stage 2 --
 void find_structure(Report& r, int pool_min) {
+    // Deadlocks: every SCC of size >= 2, plus self-loops.
+    std::set<pid_t> in_cycle;
+    for (auto& cyc : r.graph.cycles()) {
+        Finding f;
+        f.type = FindingType::Deadlock;
+        f.threads = cyc;
+        for (pid_t t : cyc) in_cycle.insert(t);
+        for (pid_t t : cyc)
+            for (const auto& e : r.graph.out(t))
+                if (std::find(cyc.begin(), cyc.end(), e.holder) != cyc.end())
+                    for (std::size_t i = 0; i < r.locks.size(); ++i)
+                        if (r.locks[i].lock.addr == e.lock_addr) f.locks.push_back(static_cast<int>(i));
+        f.behind = r.graph.waiting_on(std::set<pid_t>(cyc.begin(), cyc.end()));
+        f.persistent = true;   // a cycle can never resolve itself
+        r.findings.push_back(std::move(f));
+    }
+    for (pid_t t : r.graph.self_loops()) {
+        Finding f;
+        f.type = FindingType::SelfDeadlock;
+        f.threads = {t};
+        for (const auto& e : r.graph.out(t))
+            if (e.holder == t)
+                for (std::size_t i = 0; i < r.locks.size(); ++i)
+                    if (r.locks[i].lock.addr == e.lock_addr) f.locks.push_back(static_cast<int>(i));
+        f.behind = r.graph.waiting_on({t});
+        f.persistent = true;
+        in_cycle.insert(t);
