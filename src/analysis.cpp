@@ -203,3 +203,30 @@ void find_structure(Report& r, int pool_min) {
         f.behind = r.graph.waiting_on({t});
         f.persistent = true;
         in_cycle.insert(t);
+        r.findings.push_back(std::move(f));
+    }
+
+    // Orphaned and cross-process locks: their owners are not nodes in our graph.
+    for (std::size_t i = 0; i < r.locks.size(); ++i) {
+        const LockInfo& l = r.locks[i];
+        if (l.owner.status != OwnerStatus::Gone && l.owner.status != OwnerStatus::InOtherProcess) continue;
+        Finding f;
+        f.type = l.owner.status == OwnerStatus::Gone ? FindingType::Orphaned : FindingType::CrossProcess;
+        f.threads = l.waiters;
+        f.locks = {static_cast<int>(i)};
+        f.persistent = l.owner.status == OwnerStatus::Gone;   // a dead owner never unlocks
+        r.findings.push_back(std::move(f));
+    }
+
+    // Chains: everything blocked but not in a cycle, grouped by root cause.
+    for (const Chain& c : r.graph.chains(in_cycle)) {
+        Finding f;
+        f.type = FindingType::Chain;
+        f.sink = c.sink;
+        f.threads = c.waiters;
+        f.depth = c.max_depth;
+        f.sink_holds = locks_held_by(r, c.sink);
+        diagnose_sink(r, c.sink, f);
+        r.findings.push_back(std::move(f));
+    }
+
