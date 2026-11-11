@@ -230,3 +230,30 @@ void find_structure(Report& r, int pool_min) {
         r.findings.push_back(std::move(f));
     }
 
+    // Priority inversion: an RT thread waits on a NON-PI mutex held by a lower-priority thread.
+    for (const Edge& e : r.graph.edges()) {
+        const ThreadSnap* w = r.thread(e.waiter);
+        const ThreadSnap* h = r.thread(e.holder);
+        if (!w || !h) continue;
+        const bool w_rt = w->policy == SCHED_FIFO || w->policy == SCHED_RR;
+        const bool h_rt = h->policy == SCHED_FIFO || h->policy == SCHED_RR;
+        if (!w_rt || (h_rt && h->rt_priority >= w->rt_priority)) continue;
+        for (std::size_t i = 0; i < r.locks.size(); ++i) {
+            const LockInfo& l = r.locks[i];
+            if (l.lock.addr != e.lock_addr || l.lock.kind != LockKind::Mutex || l.lock.pi) continue;
+            Finding f;
+            f.type = FindingType::PriorityInversion;
+            f.threads = {e.waiter, e.holder};
+            f.locks = {static_cast<int>(i)};
+            r.findings.push_back(std::move(f));
+        }
+    }
+
+    // Pools: "worker-0 .. worker-7" -> "worker". Exhausted when EVERY member is lock-blocked.
+    // A core file has no thread names (Knot labels them "tid-N"), so grouping
+    // would invent one giant fake pool: skip it.
+    if (r.from_core) return;
+    std::map<std::string, PoolInfo> pools;
+    for (std::size_t i = 0; i < r.snap.threads.size(); ++i) {
+        const auto& t = r.snap.threads[i];
+        PoolInfo& p = pools[pool_key(t.name)];
