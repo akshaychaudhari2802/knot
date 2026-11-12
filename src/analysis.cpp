@@ -257,3 +257,30 @@ void find_structure(Report& r, int pool_min) {
     for (std::size_t i = 0; i < r.snap.threads.size(); ++i) {
         const auto& t = r.snap.threads[i];
         PoolInfo& p = pools[pool_key(t.name)];
+        p.name = pool_key(t.name);
+        ++p.total;
+        const auto& ti = r.threads[i];
+        if (ti.lock >= 0) ++p.lock_blocked;
+        else if (ti.why.kind == Wait::EventLoopIdle || ti.condvar_or_unknown_futex) ++p.idle;
+        else if (ti.why.kind == Wait::Running) ++p.busy;
+    }
+    for (auto& [name, p] : pools) {
+        if (p.total < 2) continue;
+        r.pools.push_back(p);
+        if (p.total >= pool_min && p.lock_blocked == p.total) {
+            Finding f;
+            f.type = FindingType::PoolExhausted;
+            f.pool = name;
+            f.value = p.total;
+            r.findings.push_back(std::move(f));
+        }
+    }
+}
+
+// ---------------------------------------------------------------- verdict --
+void decide(Report& r) {
+    auto has = [&](FindingType t) {
+        return std::any_of(r.findings.begin(), r.findings.end(), [&](const Finding& f) { return f.type == t; });
+    };
+    auto count_waiters = [&](FindingType t) {
+        std::size_t n = 0;
