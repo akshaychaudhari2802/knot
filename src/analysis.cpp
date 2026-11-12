@@ -284,3 +284,30 @@ void decide(Report& r) {
     };
     auto count_waiters = [&](FindingType t) {
         std::size_t n = 0;
+        for (const auto& f : r.findings) if (f.type == t) n += f.threads.size() + f.behind.size();
+        return n;
+    };
+    Verdict& v = r.verdict;
+    std::ostringstream os;
+    if (r.snap.syscalls_denied) {
+        v = {VerdictKind::Indeterminate, "cannot read thread syscalls (ptrace access needed)", 3};
+    } else if (has(FindingType::Deadlock)) {
+        std::size_t cycles = 0, members = 0;
+        for (const auto& f : r.findings) if (f.type == FindingType::Deadlock) { ++cycles; members += f.threads.size(); }
+        os << "DEADLOCK: " << members << " threads in " << cycles << (cycles == 1 ? " lock cycle" : " lock cycles");
+        v = {VerdictKind::Deadlock, os.str(), 1};
+    } else if (has(FindingType::SelfDeadlock)) {
+        v = {VerdictKind::SelfDeadlock, "SELF-DEADLOCK: a thread waits for a lock it already holds", 1};
+    } else if (has(FindingType::Orphaned)) {
+        os << "ORPHANED LOCK: " << count_waiters(FindingType::Orphaned)
+           << " thread(s) wait on a lock whose owner no longer exists";
+        v = {VerdictKind::Orphaned, os.str(), 2};
+    } else if (has(FindingType::Chain)) {
+        // Headline chain: a PERSISTENT one if any exists (a hang anywhere is a hang,
+        // even if a bigger chain is merely contended), else the one with most waiters.
+        const Finding* top = nullptr;
+        for (const auto& f : r.findings) {
+            if (f.type != FindingType::Chain) continue;
+            if (!top || (f.persistent && !top->persistent) ||
+                (f.persistent == top->persistent && f.threads.size() > top->threads.size()))
+                top = &f;
