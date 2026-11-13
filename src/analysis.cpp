@@ -338,3 +338,30 @@ void collect_stacks(Report& r, StackProvider* sp) {
     if (!sp) return;
     for (const auto& t : r.snap.threads) {
         if (auto st = sp->stack(t.tid)) r.stacks[t.tid] = std::move(*st);
+        else if (r.stacks_note.empty()) r.stacks_note = "T" + std::to_string(t.tid) + ": " + sp->last_error();
+    }
+    r.max_pause_ms = sp->max_pause_ms();
+}
+
+}  // namespace
+
+Report analyze_snapshot(const Source& src, Snapshot snap, SymbolResolver* symbols, int pool_min_size) {
+    const auto t0 = std::chrono::steady_clock::now();
+    Report r;
+    r.snap = std::move(snap);
+    r.from_core = !src.is_live();
+    decode_and_build(src, r, symbols);
+    find_structure(r, pool_min_size);
+    decide(r);
+    explain(r);
+    r.elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0);
+    return r;
+}
+
+// ---------------------------------------------------------------- sampling --
+// One snapshot can't tell STUCK from SLOW. N snapshots can:
+//   - a thread whose voluntary context switches did not change, sitting in the
+//     same syscall with the same arguments, has not woken up once: stuck
+//   - a chain whose sink is stuck in EVERY sample is a hang
+//   - locks that have waiters in some samples but not others are contention
+Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* symbols) {
