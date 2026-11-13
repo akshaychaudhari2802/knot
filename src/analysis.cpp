@@ -311,3 +311,30 @@ void decide(Report& r) {
             if (!top || (f.persistent && !top->persistent) ||
                 (f.persistent == top->persistent && f.threads.size() > top->threads.size()))
                 top = &f;
+        }
+        const bool stuck = r.samples > 1 && top->persistent;
+        if (stuck) {
+            os << "HUNG, not a deadlock. " << top->threads.size() << " thread(s) are waiting on one thread.";
+            v = {VerdictKind::Hung, os.str(), 2};
+        } else if (r.samples > 1) {
+            os << "CONTENDED: threads keep waiting on locks, but work is still moving.";
+            v = {VerdictKind::Contended, os.str(), 2};
+        } else {
+            os << "BLOCKED right now: " << top->threads.size() << " thread(s) waiting on one thread. "
+               << "Re-run without --once to tell a hang from contention.";
+            v = {VerdictKind::Blocked, os.str(), 2};
+        }
+    } else if (has(FindingType::CrossProcess) || has(FindingType::PriorityInversion) || has(FindingType::Busy) ||
+               has(FindingType::HotLock) || has(FindingType::Livelock)) {
+        v = {VerdictKind::Attention, "No hang, but see the findings below.", 2};
+    } else {
+        v = {VerdictKind::Healthy, "HEALTHY: no deadlock, no stuck lock chain.", 0};
+    }
+}
+
+// Tier 2: one stack per thread. Live targets: each thread is stopped only while
+// its own stack is walked (budget: < 50 ms per thread).
+void collect_stacks(Report& r, StackProvider* sp) {
+    if (!sp) return;
+    for (const auto& t : r.snap.threads) {
+        if (auto st = sp->stack(t.tid)) r.stacks[t.tid] = std::move(*st);
