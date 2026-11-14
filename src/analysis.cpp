@@ -365,3 +365,30 @@ Report analyze_snapshot(const Source& src, Snapshot snap, SymbolResolver* symbol
 //   - a chain whose sink is stuck in EVERY sample is a hang
 //   - locks that have waiters in some samples but not others are contention
 Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* symbols) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const int n = std::max(1, opt.samples);
+    std::vector<Report> reps;
+    std::vector<std::map<pid_t, std::string>> tops;   // Tier 2: per sample, top function of each RUNNING thread
+    for (int i = 0; i < n; ++i) {
+        if (i > 0) std::this_thread::sleep_for(opt.interval);
+        reps.push_back(analyze_snapshot(src, src.snapshot(), symbols, opt.pool_min_size));
+        if (opt.stacks && src.is_live()) {
+            auto& top = tops.emplace_back();
+            for (const auto& t : reps.back().snap.threads)
+                if (t.sc.running)
+                    if (auto st = opt.stacks->stack(t.tid, 8)) top[t.tid] = top_function(*st);
+        }
+        if (!src.is_live()) break;   // a core file never changes
+    }
+    // COPY, not move: the loops below still read every sample, including the
+    // last. (A move here left reps.back() empty and silently broke persistence.)
+    Report r = reps.back();
+    r.samples = static_cast<int>(reps.size());
+    if (r.samples == 1) {
+        collect_stacks(r, opt.stacks);
+        r.elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0);
+        return r;
+    }
+
+    const Snapshot& first = reps.front().snap;
+    r.window_s = std::chrono::duration<double>(r.snap.taken_at - first.taken_at).count();
