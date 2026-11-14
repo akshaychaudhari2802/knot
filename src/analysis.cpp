@@ -392,3 +392,30 @@ Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* sym
 
     const Snapshot& first = reps.front().snap;
     r.window_s = std::chrono::duration<double>(r.snap.taken_at - first.taken_at).count();
+    const double hz = static_cast<double>(proc::clock_ticks_per_second());
+
+    for (const auto& t : r.snap.threads) {
+        const ThreadSnap* f = first.find(t.tid);
+        if (!f) continue;
+        if (r.window_s > 0) r.cpu_pct[t.tid] = 100.0 * static_cast<double>(t.cpu_ticks - f->cpu_ticks) / hz / r.window_s;
+        if (!t.sc.running && t.sc.known && t.sc.nr >= 0 && t.vol_ctxt == f->vol_ctxt &&
+            t.sc.nr == f->sc.nr && t.sc.args == f->sc.args)
+            r.no_wakeups.insert(t.tid);
+    }
+
+    // A chain is persistent when its sink was a sink in EVERY sample and never woke up.
+    for (auto& f : r.findings) {
+        if (f.type != FindingType::Chain) continue;
+        bool everywhere = true;
+        for (const auto& rep : reps) {
+            const bool seen = std::any_of(rep.findings.begin(), rep.findings.end(),
+                                          [&](const Finding& g) { return g.type == FindingType::Chain && g.sink == f.sink; });
+            everywhere = everywhere && seen;
+        }
+        f.persistent = everywhere && r.no_wakeups.count(f.sink);
+        if (f.sink_kind == SinkKind::Running) diagnose_sink(r, f.sink, f);   // now with CPU %
+    }
+
+    // Locks that ARE the hang (cycle, orphan, other-process owner, held by a hung
+    // sink) are explained by that finding. Calling them "hot ... not a hang" as
+    // well contradicted the verdict (seen on the order_pipeline faults), so they
