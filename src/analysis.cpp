@@ -446,3 +446,30 @@ Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* sym
         if (h.lock < 0) {   // contended earlier but free in the last sample: carry its identity over
             for (const auto& rep : reps)
                 for (const auto& l : rep.locks)
+                    if (l.lock.addr == addr && h.lock < 0) {
+                        LockInfo copy = l;
+                        copy.waiters.clear();
+                        h.lock = static_cast<int>(r.locks.size());
+                        r.locks.push_back(std::move(copy));
+                    }
+        }
+        // "Hot" = at least 2 waiters at some point AND waiters in at least half
+        // the samples (one busy sample is noise), and not already explained.
+        if (h.max_waiters >= 2 && 2 * h.contended_samples >= r.samples && !explained.count(addr))
+            r.hot_locks.push_back(h);
+    }
+    std::sort(r.hot_locks.begin(), r.hot_locks.end(),
+              [](const HotLock& a, const HotLock& b) { return a.avg_waiters > b.avg_waiters; });
+    if (!r.hot_locks.empty()) {   // one finding carries the explanation for the whole table
+        Finding f;
+        f.type = FindingType::HotLock;
+        f.locks = {r.hot_locks.front().lock};
+        f.value = r.hot_locks.front().avg_waiters;
+        r.findings.push_back(std::move(f));
+    }
+
+    // Busy: on-CPU in every sample at > 80%. With Tier 2 stacks this becomes a
+    // livelock check (same top frame every sample); Tier 1 can only say "busy".
+    for (const auto& [tid, pct] : r.cpu_pct) {
+        const ThreadSnap* t = r.thread(tid);
+        if (pct > 80.0 && t && t->sc.running) {
