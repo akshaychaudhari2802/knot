@@ -419,3 +419,30 @@ Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* sym
     // Locks that ARE the hang (cycle, orphan, other-process owner, held by a hung
     // sink) are explained by that finding. Calling them "hot ... not a hang" as
     // well contradicted the verdict (seen on the order_pipeline faults), so they
+    // are excluded from the hot-lock table.
+    std::set<std::uint64_t> explained;
+    for (const auto& f : r.findings) {
+        const bool hang = f.type == FindingType::Deadlock || f.type == FindingType::SelfDeadlock ||
+                          f.type == FindingType::Orphaned || f.type == FindingType::CrossProcess ||
+                          (f.type == FindingType::Chain && f.persistent);
+        if (!hang) continue;
+        for (int li : f.locks) explained.insert(r.locks[static_cast<std::size_t>(li)].lock.addr);
+        for (int li : f.sink_holds) explained.insert(r.locks[static_cast<std::size_t>(li)].lock.addr);
+    }
+
+    // Hot locks: waiter counts per lock across samples (keyed by lock address).
+    std::map<std::uint64_t, HotLock> hot;
+    for (const auto& rep : reps)
+        for (const auto& l : rep.locks) {
+            HotLock& h = hot[l.lock.addr];
+            h.avg_waiters += static_cast<double>(l.waiters.size());
+            h.max_waiters = std::max(h.max_waiters, static_cast<int>(l.waiters.size()));
+            ++h.contended_samples;
+        }
+    for (auto& [addr, h] : hot) {
+        h.avg_waiters /= static_cast<double>(reps.size());
+        for (std::size_t i = 0; i < r.locks.size(); ++i)
+            if (r.locks[i].lock.addr == addr) h.lock = static_cast<int>(i);
+        if (h.lock < 0) {   // contended earlier but free in the last sample: carry its identity over
+            for (const auto& rep : reps)
+                for (const auto& l : rep.locks)
