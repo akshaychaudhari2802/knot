@@ -500,3 +500,30 @@ Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* sym
     explain(r);
     r.elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0);
     return r;
+}
+
+const char* to_string(VerdictKind v) {
+    switch (v) {
+        case VerdictKind::Healthy: return "healthy";
+        case VerdictKind::Deadlock: return "deadlock";
+        case VerdictKind::SelfDeadlock: return "self-deadlock";
+        case VerdictKind::Orphaned: return "orphaned-lock";
+        case VerdictKind::Hung: return "hung";
+        case VerdictKind::Blocked: return "blocked";
+        case VerdictKind::Contended: return "contended";
+        case VerdictKind::Attention: return "attention";
+        case VerdictKind::Indeterminate: return "indeterminate";
+    }
+    return "?";
+}
+
+const char* to_string(FindingType f) {
+    switch (f) {
+        case FindingType::Deadlock: return "deadlock";
+        case FindingType::SelfDeadlock: return "self-deadlock";
+        case FindingType::Orphaned: return "orphaned-lock";
+        case FindingType::CrossProcess: return "cross-process-lock";
+        case FindingType::Chain: return "chain";
+        case FindingType::PriorityInversion: return "priority-inversion";
+        case FindingType::PoolExhausted: return "pool-exhausted";
+        case FindingType::HotLock: return "hot-lock";
