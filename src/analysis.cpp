@@ -473,3 +473,30 @@ Report analyze(const Source& src, const AnalyzeOptions& opt, SymbolResolver* sym
     for (const auto& [tid, pct] : r.cpu_pct) {
         const ThreadSnap* t = r.thread(tid);
         if (pct > 80.0 && t && t->sc.running) {
+            Finding f;
+            f.type = FindingType::Busy;
+            f.threads = {tid};
+            f.value = pct;
+            // Tier 2: the same function on top in EVERY sample upgrades "busy" to
+            // "likely livelock / spin loop". Different functions = real work moving.
+            if (!tops.empty()) {
+                std::string same;
+                bool all_same = true;
+                for (const auto& top : tops) {
+                    auto it = top.find(tid);
+                    if (it == top.end() || it->second.empty() || (!same.empty() && it->second != same)) { all_same = false; break; }
+                    same = it->second;
+                }
+                if (all_same) {
+                    f.type = FindingType::Livelock;
+                    f.sink_state = same;
+                }
+            }
+            r.findings.push_back(std::move(f));
+        }
+    }
+    collect_stacks(r, opt.stacks);
+    decide(r);
+    explain(r);
+    r.elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0);
+    return r;
