@@ -527,3 +527,10 @@ const char* to_string(FindingType f) {
         case FindingType::PriorityInversion: return "priority-inversion";
         case FindingType::PoolExhausted: return "pool-exhausted";
         case FindingType::HotLock: return "hot-lock";
+        case FindingType::Busy: return "busy";
+        case FindingType::Livelock: return "livelock";
+    }
+    return "?";
+}
+
+}  // namespace knot
