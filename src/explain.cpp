@@ -72,3 +72,30 @@ void explain(Report& r) {
                 const Text c = chain_text(f.sink_kind);
                 t = c;
                 break;
+            }
+            case FindingType::PriorityInversion:
+                t = {"A real-time thread waits on a mutex held by a lower-priority thread, and the mutex does "
+                     "not inherit priority, so medium-priority work can starve the holder indefinitely "
+                     "(the Mars Pathfinder bug).",
+                     "pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT) on this mutex."};
+                break;
+            case FindingType::PoolExhausted:
+                t = {"Every thread in this pool is blocked on a lock, so no new work can start. "
+                     "The pool is a symptom; the root cause is the chain above.",
+                     "Fix the root cause; a bigger pool only delays the same stall."};
+                break;
+            case FindingType::HotLock:
+                t = {"These locks had waiters in at least half the samples while work kept moving: contention, not a hang.",
+                     "Shorten what runs under it, shard it, or move work outside the critical section."};
+                break;
+            case FindingType::Busy:
+                t = {"This thread was on a CPU in every sample. Could be real work, or a spin/retry loop.",
+                     "knot --stacks: the same top frame in every sample points to a livelock."};
+                break;
+            case FindingType::Livelock:
+                t = {"On a CPU in every sample, with the same function on top each time: a spin or "
+                     "retry loop that is not making progress (or one very long computation).",
+                     "Check the loop's exit condition. Replace spin/retry with a blocking wait "
+                     "(condition variable, futex) or add back-off."};
+                break;
+        }
