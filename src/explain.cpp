@@ -45,3 +45,30 @@ Text chain_text(SinkKind k) {
     return {"", ""};
 }
 }  // namespace
+
+void explain(Report& r) {
+    for (auto& f : r.findings) {
+        Text t{"", ""};
+        switch (f.type) {
+            case FindingType::Deadlock:
+                t = {"Two or more threads each hold a lock the next one needs, in a cycle. None can ever proceed.",
+                     "Acquire these locks in one global order everywhere, or take them together with std::scoped_lock."};
+                break;
+            case FindingType::SelfDeadlock:
+                t = {"A thread tried to lock a NORMAL (non-recursive) mutex it already holds. It blocks forever.",
+                     "Lock once. If re-entry is intended, use std::recursive_mutex deliberately."};
+                break;
+            case FindingType::Orphaned:
+                t = {"The thread that locked this mutex exited without unlocking it: an exception or early "
+                     "return between lock() and unlock(), or pthread_exit/pthread_cancel.",
+                     "Use std::lock_guard / std::unique_lock, never manual lock()/unlock(). If an owner may "
+                     "legitimately die, make the mutex ROBUST: the next locker gets EOWNERDEAD instead of hanging."};
+                break;
+            case FindingType::CrossProcess:
+                t = {"This lock lives in shared memory and is held by a thread of another process.",
+                     "Run knot on that process to see what the holder is doing."};
+                break;
+            case FindingType::Chain: {
+                const Text c = chain_text(f.sink_kind);
+                t = c;
+                break;
