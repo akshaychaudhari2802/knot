@@ -99,3 +99,9 @@ void explain(Report& r) {
                      "(condition variable, futex) or add back-off."};
                 break;
         }
+        f.likely_cause = t.cause;
+        f.fix_hint = t.fix;
+    }
+}
+
+}  // namespace knot
