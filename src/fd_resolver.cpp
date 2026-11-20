@@ -73,3 +73,30 @@ std::string FdResolver::describe(int fd) const {
 
 // Search the TARGET's network namespace (/proc/<pid>/net/*, not /proc/net/*):
 // inside a container, the target's sockets are not in Knot's namespace at all.
+std::string FdResolver::describe_socket(std::uint64_t inode) const {
+    struct Table { const char* file; const char* proto; bool v6; };
+    for (const Table& t : {Table{"net/tcp", "TCP", false}, Table{"net/tcp6", "TCP", true},
+                           Table{"net/udp", "UDP", false}, Table{"net/udp6", "UDP", true}}) {
+        auto c = proc::read_file(proc::path(pid_, t.file));
+        if (!c) continue;
+        std::istringstream in(*c);
+        std::string line;
+        std::getline(in, line);   // header
+        while (std::getline(in, line)) {
+            // sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode ...
+            std::istringstream ls(line);
+            std::string sl, local, remote, st, txrx, trwhen, retr, uid, timeout, ino;
+            if (!(ls >> sl >> local >> remote >> st >> txrx >> trwhen >> retr >> uid >> timeout >> ino)) continue;
+            if (std::strtoull(ino.c_str(), nullptr, 10) != inode) continue;
+            const std::string l = t.v6 ? decode_ipv6(local) : decode_ipv4(local);
+            const std::string r = t.v6 ? decode_ipv6(remote) : decode_ipv4(remote);
+            std::string out = std::string(t.proto) + " " + l + " -> " + r;
+            const unsigned rport = static_cast<unsigned>(std::strtoul(remote.substr(remote.find(':') + 1).c_str(), nullptr, 16));
+            if (const char* wk = well_known_port(rport)) out += std::string("  (") + wk + ")";
+            // tx_queue: bytes written but not yet acknowledged/read by the peer.
+            const auto txq = std::strtoull(txrx.substr(0, txrx.find(':')).c_str(), nullptr, 16);
+            if (txq > 0) out += "  send-queue " + std::to_string(txq) + " B";
+            return out;
+        }
+    }
+    if (auto c = proc::read_file(proc::path(pid_, "net/unix"))) {
