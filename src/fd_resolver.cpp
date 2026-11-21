@@ -100,3 +100,20 @@ std::string FdResolver::describe_socket(std::uint64_t inode) const {
         }
     }
     if (auto c = proc::read_file(proc::path(pid_, "net/unix"))) {
+        std::istringstream in(*c);
+        std::string line;
+        std::getline(in, line);
+        while (std::getline(in, line)) {
+            // Num RefCount Protocol Flags Type St Inode [Path]
+            std::istringstream ls(line);
+            std::string num, ref, protocol, flags, type, st, ino, p;
+            if (!(ls >> num >> ref >> protocol >> flags >> type >> st >> ino)) continue;
+            if (std::strtoull(ino.c_str(), nullptr, 10) != inode) continue;
+            ls >> p;
+            return p.empty() ? "unix socket (unnamed, e.g. socketpair)" : "unix socket " + p;
+        }
+    }
+    return "socket (inode " + std::to_string(inode) + ")";
+}
+
+}  // namespace knot
