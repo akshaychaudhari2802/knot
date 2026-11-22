@@ -62,3 +62,30 @@ std::vector<std::vector<pid_t>> WaitGraph::cycles() const {
                     on_stack.insert(w);
                     call.push_back({w, 0});
                 } else if (on_stack.count(w)) {
+                    low[f.node] = std::min(low[f.node], index[w]);
+                }
+                continue;
+            }
+            // All edges done: f.node is finished.
+            const pid_t v = f.node;
+            call.pop_back();
+            if (!call.empty()) low[call.back().node] = std::min(low[call.back().node], low[v]);
+            if (low[v] == index[v]) {                          // v roots an SCC
+                std::vector<pid_t> scc;
+                pid_t w;
+                do {
+                    w = stack.back();
+                    stack.pop_back();
+                    on_stack.erase(w);
+                    scc.push_back(w);
+                } while (w != v);
+                if (scc.size() >= 2) {
+                    std::reverse(scc.begin(), scc.end());
+                    result.push_back(std::move(scc));
+                }
+            }
+        }
+    }
+    return result;
+}
+
