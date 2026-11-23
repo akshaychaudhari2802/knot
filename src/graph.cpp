@@ -116,3 +116,27 @@ std::vector<Chain> WaitGraph::chains(const std::set<pid_t>& in_cycle) const {
         // Reverse BFS from the sink: everyone who eventually waits on it.
         Chain c;
         c.sink = n;
+        std::map<pid_t, int> depth{{n, 0}};
+        std::queue<pid_t> q;
+        q.push(n);
+        while (!q.empty()) {
+            const pid_t v = q.front();
+            q.pop();
+            auto it = in_.find(v);
+            if (it == in_.end()) continue;
+            for (pid_t w : it->second) {
+                if (depth.count(w) || in_cycle.count(w)) continue;
+                depth[w] = depth[v] + 1;
+                c.max_depth = std::max(c.max_depth, depth[w]);
+                c.waiters.push_back(w);
+                q.push(w);
+            }
+        }
+        result.push_back(std::move(c));
+    }
+    std::sort(result.begin(), result.end(),
+              [](const Chain& a, const Chain& b) { return a.waiters.size() > b.waiters.size(); });
+    return result;
+}
+
+}  // namespace knot
