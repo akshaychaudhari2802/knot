@@ -89,3 +89,30 @@ std::vector<std::vector<pid_t>> WaitGraph::cycles() const {
     return result;
 }
 
+std::vector<pid_t> WaitGraph::waiting_on(const std::set<pid_t>& targets) const {
+    std::vector<pid_t> result;
+    std::set<pid_t> seen(targets.begin(), targets.end());
+    std::queue<pid_t> q;
+    for (pid_t t : targets) q.push(t);
+    while (!q.empty()) {
+        const pid_t v = q.front();
+        q.pop();
+        auto it = in_.find(v);
+        if (it == in_.end()) continue;
+        for (pid_t w : it->second)
+            if (seen.insert(w).second) { result.push_back(w); q.push(w); }
+    }
+    return result;
+}
+
+std::vector<Chain> WaitGraph::chains(const std::set<pid_t>& in_cycle) const {
+    std::vector<Chain> result;
+    for (pid_t n : nodes_) {
+        auto in_it = in_.find(n);
+        const bool has_waiters = in_it != in_.end() && !in_it->second.empty();
+        const bool waits_itself = out_.count(n) && !out(n).empty();
+        if (!has_waiters || waits_itself || in_cycle.count(n)) continue;   // not a sink
+
+        // Reverse BFS from the sink: everyone who eventually waits on it.
+        Chain c;
+        c.sink = n;
