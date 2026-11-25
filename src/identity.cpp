@@ -55,3 +55,29 @@ Owner Identity::resolve(pid_t owner_ns_tid, bool process_shared) const {
                 if (!st || innermost_nspid(*st) != owner_ns_tid) continue;
                 o.status = OwnerStatus::InOtherProcess;
                 o.host_tid = t;
+                o.other_pid = p;
+                if (auto nm = proc::status_field(*st, "Name")) o.other_thread = *nm;
+                break;
+            }
+            if (o.status == OwnerStatus::InOtherProcess) break;
+        }
+    }
+    if (o.status == OwnerStatus::InOtherProcess) {
+        if (auto c = proc::read_file(proc::path(o.other_pid, "comm"))) o.other_name = proc::trim(*c);
+        return o;
+    }
+    o.status = OwnerStatus::Gone;   // exists nowhere: an orphaned lock
+    return o;
+}
+
+const char* to_string(OwnerStatus s) {
+    switch (s) {
+        case OwnerStatus::Unlocked: return "unlocked";
+        case OwnerStatus::InThisProcess: return "this process";
+        case OwnerStatus::InOtherProcess: return "another process";
+        case OwnerStatus::Gone: return "gone";
+    }
+    return "?";
+}
+
+}  // namespace knot
