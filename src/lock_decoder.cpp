@@ -26,3 +26,30 @@ std::optional<DecodedLock> LockDecoder::try_mutex(std::uint64_t base) const {
     if ((kind & ~kKnownBits) != 0 || (kind & 0x03) == 0x03) return std::nullopt;
     if (owner <= 0) return std::nullopt;
     const bool pi_or_robust = (kind & (0x10 | 0x20)) != 0;
+    const bool lock_ok = pi_or_robust ? (lock & 0x3FFFFFFF) == owner   // second witness
+                                      : (lock == 1 || lock == 2);        // 2 = locked with waiters
+    if (!lock_ok) return std::nullopt;
+
+    DecodedLock d;
+    d.kind = LockKind::Mutex;
+    d.addr = d.futex_addr = base;
+    d.owner_ns_tid = owner;
+    d.kind_flags = kind;
+    d.pi = (kind & 0x20) != 0;
+    d.robust = (kind & 0x10) != 0;
+    d.recursive = (kind & 0x03) == 1;
+    d.process_shared = (kind & 0x80) != 0;
+    return d;
+}
+
+// glibc >= 2.25 rwlock. We can only name the WRITER holding it; readers are
+// counted in __readers but their identities are not recorded anywhere.
+std::optional<DecodedLock> LockDecoder::try_rwlock(std::uint64_t base, std::uint64_t futex_addr) const {
+    unsigned char raw[56];
+    if (!src_.read_memory(base, raw, sizeof raw)) return std::nullopt;
+    const std::uint32_t readers = u32(raw + 0);
+    const std::uint32_t futex_word = u32(raw + (futex_addr - base));
+    const std::int32_t cur_writer = i32(raw + 24);
+    const std::int32_t shared = i32(raw + 28);
+    const std::uint32_t flags = u32(raw + 48);
+    if (cur_writer <= 0) return std::nullopt;                    // no writer to blame
