@@ -53,3 +53,30 @@ std::optional<DecodedLock> LockDecoder::try_rwlock(std::uint64_t base, std::uint
     const std::int32_t shared = i32(raw + 28);
     const std::uint32_t flags = u32(raw + 48);
     if (cur_writer <= 0) return std::nullopt;                    // no writer to blame
+    if (shared != 0 && shared != 1) return std::nullopt;         // PTHREAD_PROCESS_* only
+    if (flags > 2) return std::nullopt;                          // PTHREAD_RWLOCK_PREFER_* only
+    // Two more witnesses from glibc's protocol (nptl/pthread_rwlock_common.c):
+    // a writer holds it => __readers has PTHREAD_RWLOCK_WRLOCKED (2) set, and the
+    // futex word being waited on has bit 0 set (write phase / writer owns).
+    // Bit 1 is PTHREAD_RWLOCK_FUTEX_USED, set once anyone has slept: a stuck
+    // rwlock reads 3 here (verified live), so mask it out.
+    if ((readers & 2u) == 0) return std::nullopt;
+    if ((futex_word & ~2u) != 1u) return std::nullopt;
+    DecodedLock d;
+    d.kind = LockKind::RwLockWrite;
+    d.addr = base;
+    d.futex_addr = futex_addr;
+    d.owner_ns_tid = cur_writer;
+    d.process_shared = shared == 1;
+    d.reader_wait = (futex_addr == base + 8);
+    return d;
+}
+
+DecodedLock LockDecoder::decode(std::uint64_t futex_addr) const {
+    if (auto m = try_mutex(futex_addr)) return *m;
+    // Verified live: blocked readers sleep on rwlock+8, blocked writers on rwlock+12.
+    // So the rwlock starts BEFORE the futex address.
+    for (std::uint64_t back : {8u, 12u})
+        if (futex_addr >= back)
+            if (auto r = try_rwlock(futex_addr - back, futex_addr)) return *r;
+    DecodedLock unknown;
