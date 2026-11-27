@@ -80,3 +80,8 @@ DecodedLock LockDecoder::decode(std::uint64_t futex_addr) const {
         if (futex_addr >= back)
             if (auto r = try_rwlock(futex_addr - back, futex_addr)) return *r;
     DecodedLock unknown;
+    unknown.addr = unknown.futex_addr = futex_addr;
+    return unknown;   // condvar, semaphore, custom futex... when in doubt, leave the edge out
+}
+
+}  // namespace knot
