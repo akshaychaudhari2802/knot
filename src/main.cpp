@@ -74,3 +74,30 @@ int cmd_show(const std::string& file) {
         const char e = j[++i];
         if (e == 'u' && i + 4 < j.size()) {   // json_escape writes other control characters as \u00XX
             out += static_cast<char>(std::strtol(j.substr(i + 1, 4).c_str(), nullptr, 16));
+            i += 4;
+            continue;
+        }
+        out += e == 'n' ? '\n' : e == 't' ? '\t' : e;
+    }
+    std::fputs(out.c_str(), stdout);
+    return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    if (argc < 2) { usage(); return 4; }
+    std::string mode = "diagnose";
+    pid_t pid = 0;
+    std::string core_path, json_path;
+    AnalyzeOptions ao;
+    RenderOptions ro;
+    WatchOptions wo;
+    bool quiet = false;
+    bool want_stacks = false;
+
+    int i = 1;
+    if (std::strcmp(argv[1], "watch") == 0) { mode = "watch"; i = 2; }
+    else if (std::strcmp(argv[1], "show") == 0) { if (argc < 3) { usage(); return 4; } return cmd_show(argv[2]); }
+
+    for (; i < argc; ++i) {
