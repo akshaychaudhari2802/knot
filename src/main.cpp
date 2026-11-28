@@ -47,3 +47,30 @@ std::string arg_value(int& i, int argc, char** argv) {
     return argv[++i];
 }
 
+// A non-negative integer that is the WHOLE string. (atoi read "12abc" as pid 12
+// and "--samples x" as 0, silently.)
+int number(const std::string& s) {
+    int v = -1;
+    const auto [end, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
+    if (ec != std::errc{} || end != s.data() + s.size() || v < 0) {
+        std::fprintf(stderr, "knot: expected a non-negative number, got '%s'\n", s.c_str());
+        std::exit(4);
+    }
+    return v;
+}
+
+int cmd_show(const std::string& file) {
+    std::ifstream in(file);
+    if (!in) { std::fprintf(stderr, "knot: cannot open %s\n", file.c_str()); return 4; }
+    std::stringstream ss;
+    ss << in.rdbuf();
+    const std::string j = ss.str();
+    // The bundle carries its rendered text: find and unescape "report_text".
+    const auto k = j.find("\"report_text\": \"");
+    if (k == std::string::npos) { std::fputs("knot: not a knot bundle\n", stderr); return 4; }
+    std::string out;
+    for (std::size_t i = k + 16; i < j.size() && j[i] != '"'; ++i) {
+        if (j[i] != '\\') { out += j[i]; continue; }
+        const char e = j[++i];
+        if (e == 'u' && i + 4 < j.size()) {   // json_escape writes other control characters as \u00XX
+            out += static_cast<char>(std::strtol(j.substr(i + 1, 4).c_str(), nullptr, 16));
